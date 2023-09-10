@@ -1,0 +1,5 @@
+*.mqproj    text eol=crlf
+*.mq5	    text diff=cpp eol=crlf
+*.mqh		text diff=cpp eol=crlf
+*.mqproj    text diff=json eol=lf
+*.ex5       binary

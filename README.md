@@ -14,7 +14,7 @@ int  WebRequest2(
    int               timeout,               // timeout
    char              &data[],               // the array of the HTTP message body
    char              &result[],             // an array containing server response data
-   string            &result_headers        // headers of server response
+   string            &result_headers,       // headers of server response
    const int         port=NULL,             // Define custom port
    const bool        allowInsecure=false,   // Allow self signed certs
    const bool        useSSL=NULL            // Use SSL encrypted connection
