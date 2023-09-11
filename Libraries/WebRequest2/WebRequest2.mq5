@@ -7,7 +7,7 @@
 #property link      "https://github.com/sirtoobii"
 #property version		"1.00"
 #property library
-#include <..\Libraries\WebRequest2\InetHttp.mqh>
+#include "InetHttp.mqh"
 MqlNet INet;
 int  WebRequest2(
    const string      method,           // HTTP-Methode
@@ -53,15 +53,15 @@ int  WebRequest2(
       {
          Host = StringSubstr(lower_Url, 0, path_start);
          Path = StringSubstr(url, path_start+offset);
-         LogError(0, "Set Host to: " +Host+ " and Path: " +Path+ " with Port: " +IntegerToString(Port) + " SSL=" + (string) useSSL + " Insecure=" + (string) allowInsecure);
+         LogError(0, "Set Host to: " +Host+ " and Path: " +Path+ " with Port: " +IntegerToString(Port) + " SSL=" + (string) UseSSL + " Insecure=" + (string) allowInsecure);
       }else{
          Host = lower_Url;
-         LogError(0, "Set Host to: " +Host+ " with Port: " +IntegerToString(Port) + " SSL=" + (string) useSSL + " Insecure=" + (string) allowInsecure);
+         LogError(0, "Set Host to: " +Host+ " with Port: " +IntegerToString(Port) + " SSL=" + (string) UseSSL + " Insecure=" + (string) allowInsecure);
       }
       //Open connection
       if (!INet.Open(Host, Port, "", "", INTERNET_SERVICE_HTTP)) return -1;
-      if (method=="GET")  req.Init(method, Path,          Head, "",   false, file, false, useSSL, allowInsecure);
-      if (method=="POST") req.Init(method, Path,          Head, "", false, file, false, useSSL, allowInsecure);
+      if (method=="GET")  req.Init(method, Path,          Head, "",   false, file, false, UseSSL, allowInsecure);
+      if (method=="POST") req.Init(method, Path,          Head, "", false, file, false, UseSSL, allowInsecure);
       INet.Request(req, data, result);
       result_headers = req.resHeader;
       return req.resCode;
