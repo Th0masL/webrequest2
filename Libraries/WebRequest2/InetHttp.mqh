@@ -179,7 +179,7 @@ bool MqlNet::Request(tagRequest &req,uchar &inData[],uchar &outData[])
       hRequest=HttpOpenRequestW(hConnect,req.stVerb,req.stObject,Vers,nuller,nuller,INTERNET_FLAG_KEEP_CONNECTION|INTERNET_FLAG_RELOAD|INTERNET_FLAG_PRAGMA_NOCACHE,0);
      }
 //Get last error code
-   if(hRequest<=0) {lastError=kernel32::GetLastError(); Print("-Err OpenRequest "+(string) lastError); InternetCloseHandle(hConnect); return(false); }
+   if(hRequest<=0) {lastError=Kernel32::GetLastError(); Print("-Err OpenRequest "+(string) lastError); InternetCloseHandle(hConnect); return(false); }
 //Set certificate policity (warning this configuration is very unsecure and shouldn't be used where security matters!)
    if(req.trustSelf)
      {
@@ -191,7 +191,7 @@ bool MqlNet::Request(tagRequest &req,uchar &inData[],uchar &outData[])
       dwFlags|=SECURITY_FLAG_IGNORE_CERT_CN_INVALID;
       dwFlags|=SECURITY_FLAG_IGNORE_REVOCATION;
       bool rez=InternetSetOptionW(hRequest,INTERNET_OPTION_SECURITY_FLAGS,dwFlags,sizeof(dwFlags));
-      if(!rez) {lastError=kernel32::GetLastError(); Print("-Err SetOptionW "+(string)lastError); }
+      if(!rez) {lastError=Kernel32::GetLastError(); Print("-Err SetOptionW "+(string)lastError); }
      }
 // sending the request 
    int n=0;
@@ -202,7 +202,7 @@ bool MqlNet::Request(tagRequest &req,uchar &inData[],uchar &outData[])
       hSend=HttpSendRequestW(hRequest,req.stHead,StringLen(req.stHead),inData,ArraySize(inData));
       if(hSend<=0)
         {
-         lastError=kernel32::GetLastError(); Print("-Err SendRequest= ",(string) lastError);
+         lastError=Kernel32::GetLastError(); Print("-Err SendRequest= ",(string) lastError);
         }
       else break;
      }
@@ -240,7 +240,7 @@ int MqlNet::GetContentSize(int hRequest)
    if(!MQL5InfoInteger(MQL5_DLLS_ALLOWED)) { Print("-DLL not allowed"); return(false); } // checking whether DLLs are allowed in the terminal
    int len=32,ind=0; uchar buf[32];
    bool Res=HttpQueryInfoW(hRequest,HTTP_QUERY_CONTENT_LENGTH,buf,len,ind);
-   if(!Res) { int lastError=kernel32::GetLastError(); Print("-Err QueryInfo (Size)" + (string) lastError); return(-1); }
+   if(!Res) { int lastError=Kernel32::GetLastError(); Print("-Err QueryInfo (Size)" + (string) lastError); return(-1); }
 //This is a workaround because CharArrayToString does somehow not work...
    string s;
    for(int i=0;i<len;i++)
@@ -260,7 +260,7 @@ int MqlNet::GetHTTPStatusCode(int hRequest)
    int cBuffLength=32;
    int cBuffIndex=0;
    bool Res=HttpQueryInfoW(hRequest,HTTP_QUERY_STATUS_CODE,cBuff,cBuffLength,cBuffIndex);
-   if(!Res) { int lastError=kernel32::GetLastError(); Print("-Err QueryInfo (Status)" + (string) lastError); return(-1); }
+   if(!Res) { int lastError=Kernel32::GetLastError(); Print("-Err QueryInfo (Status)" + (string) lastError); return(-1); }
    string s="";
    for(int i=0;i<cBuffLength;i++)
      {
