@@ -1,0 +1,17 @@
+# Commands to use :
+# clang-format -i *.mqh
+# clang-format -i *.mq5
+
+# Options: https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+
+BasedOnStyle: LLVM
+IndentWidth: 3
+ColumnLimit: 200
+SpaceAfterCStyleCast: true
+UseTab: Never
+AllowShortIfStatementsOnASingleLine: false
+AlignTrailingComments: true
+SpacesBeforeTrailingComments: 3
+AlwaysBreakAfterReturnType: None
+AlignConsecutiveMacros: Consecutive
+UseCRLF: false

@@ -1,7 +1,7 @@
-#property copyright     "Copyright 2023"
-#property link          ""
-#property version       "1.00"
-#property description   "TestWebRequest2"
+#property copyright "Copyright 2023"
+#property link ""
+#property version "1.00"
+#property description "TestWebRequest2"
 
 #include "../Libraries/WebRequest2/WebRequest2.mq5"
 
