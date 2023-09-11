@@ -42,6 +42,16 @@ int  WebRequest2(
 #include <..\Libraries\WebRequest2\WebRequest2.mq5>
 ```
 
+ #### Test the library
+
+ You can use the script `Scripts/TestWebRequest2.mq5` as an example of how you can detect your Public IP by doing an HTTP/HTTPS request using this `WebRequest` library.
+
+ 1. Build the script `Scripts/TestWebRequest2.mq5` using MetaEditor
+ 2. Copy the file `TestWebRequest2.ex5` that has been built to the `Scripts` folder in your MetaTrader5 profile folder
+ 3. Open MetaTrader5 on a random chart
+ 4. Allow DLLs in your Terminal
+ 5. Load the script `TestWebRequest2.ex5` from the `Scripts` folder
+ 6. In the Terminal journal, verify that your Public IP address has been detected correctly
  
  #### Disclaimer
  You use this software at your own risk!
