@@ -11,6 +11,26 @@
 #property version "1.01"
 #property description "WinHttp & WinInet API"
 #property library
+#property strict
+
+// Useful link to investigate/fix "leaked strings left"
+// https://uhoho.hatenablog.jp/entry/2022/10/24/040523
+
+// If not provided, set the Log Verbosity to 1
+// Value 0: Show everything (Debug, Info, Warn and Error)
+// Value 1: Show only Info, Warn and Error
+// Value 2: Show only Warn and Error
+// Value 3: Show only Error
+
+// By default, show Info, Warn and Error
+#ifndef INETHTTP_LOG_LEVEL_MIN
+   #define INETHTTP_LOG_LEVEL_MIN 1
+#endif
+
+#define INETHTTP_LOG_DEBUG 0
+#define INETHTTP_LOG_INFO 1
+#define INETHTTP_LOG_WARN 2
+#define INETHTTP_LOG_ERROR 3
 
 #define FALSE 0
 
@@ -31,12 +51,19 @@
 DWORD GetLastError(void);
 #import
 
+
+/*
+To fix the problem with "leaked strings left", remove the & from the declaration of the following variables (at least)
+InternetOpenW - lpszAgentlpszAgent, lpszProxyName, lpszProxyBypass
+InternetConnectW - lpszServerName, lpszUsername, lpszPassword
+HttpOpenRequestW - lpszVerb, lpszObjectName, lpszVersion, lpszReferer, lplpszAcceptTypes
+*/
+
 #import "wininet.dll"
 DWORD InternetAttemptConnect(DWORD dwReserved);
 HINTERNET InternetOpenW(LPCTSTR lpszAgent, DWORD dwAccessType, LPCTSTR lpszProxyName, LPCTSTR lpszProxyBypass, DWORD dwFlags);
 HINTERNET InternetConnectW(HINTERNET hInternet, LPCTSTR lpszServerName, INTERNET_PORT nServerPort, LPCTSTR lpszUsername, LPCTSTR lpszPassword, DWORD dwService, DWORD dwFlags, DWORD_PTR dwContext);
-HINTERNET HttpOpenRequestW(HINTERNET hConnect, LPCTSTR lpszVerb, LPCTSTR lpszObjectName, LPCTSTR lpszVersion, LPCTSTR lpszReferer, LPCTSTR lplpszAcceptTypes, uint /*DWORD*/ dwFlags,
-                           DWORD_PTR dwContext);
+HINTERNET HttpOpenRequestW(HINTERNET hConnect, LPCTSTR lpszVerb, LPCTSTR lpszObjectName, LPCTSTR lpszVersion, LPCTSTR lpszReferer, LPCTSTR lplpszAcceptTypes, uint /*DWORD*/ dwFlags, DWORD_PTR dwContext);
 BOOL HttpSendRequestW(HINTERNET hRequest, LPCTSTR lpszHeaders, DWORD dwHeadersLength, LPVOID lpOptional[], DWORD dwOptionalLength);
 BOOL HttpQueryInfoW(HINTERNET hRequest, DWORD dwInfoLevel, LPVOID lpvBuffer[], LPDWORD lpdwBufferLength, LPDWORD lpdwIndex);
 HINTERNET InternetOpenUrlW(HINTERNET hInternet, LPCTSTR lpszUrl, LPCTSTR lpszHeaders, DWORD dwHeadersLength, uint /*DWORD*/ dwFlags, DWORD_PTR dwContext);
@@ -120,6 +147,7 @@ class MqlNet {
    string GetHTTPHeaders(int hRequest);                                            // Get all result headers
    int GetHTTPStatusCode(int hRequest);                                            // returns the status code of a request
    bool CheckTerminal();                                                           // Checks terminal if DLL's are allowed
+   void LogError(int pLevel, string pMsg);                                           // Log message
 };
 //------------------------------------------------------------------ MqlNet
 void MqlNet::MqlNet() {
@@ -136,36 +164,38 @@ void MqlNet::~MqlNet() {
 }
 //------------------------------------------------------------------ Open
 bool MqlNet::Open(string aHost, int aPort, string aUser, string aPass, int aService) {
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::Open - Start function.");
    if (aHost == "") {
-      Print("-Host not specified");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - Host not specified");
       return (false);
    }
    if (!TerminalInfoInteger(TERMINAL_DLLS_ALLOWED)) {
-      Print("-DLL not allowed");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
    if (!MQL5InfoInteger(MQL5_DLLS_ALLOWED)) {
-      Print("-DLL not allowed");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - DLL not allowed");
       return (false);
    }                         // checking whether DLLs are allowed in the terminal
    if (hSession > 0 || hConnect > 0)
       Close();               // close if a session was determined
-   Print("+Open Inet...");   // print a message about the attempt of opening in the journal
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::Open - Open Inet...");   // print a message about the attempt of opening in the journal
    if (InternetAttemptConnect(0) != 0) {
-      Print("-Err AttemptConnect");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - Err InternetAttemptConnect");
       return (false);
    }   // exit if the attempt to check the current Internet connection failed
-   string UserAgent = "Metatrader 5";
+   // string UserAgent = "Metatrader 5";
+   string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0";
    string nill = "";
    hSession = InternetOpenW(UserAgent, OPEN_TYPE_PRECONFIG, nill, nill, 0);   // open session
    if (hSession <= 0) {
-      Print("-Err create Session");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - Err create Session using InternetOpenW");
       Close();
       return (false);
    }   // exit if the attempt to open the session failed
    hConnect = InternetConnectW(hSession, aHost, aPort, aUser, aPass, aService, 0, 0);
    if (hConnect <= 0) {
-      Print("-Err create Connect");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - Err create Connect using InternetConnectW");
       Close();
       return (false);
    }
@@ -178,19 +208,21 @@ bool MqlNet::Open(string aHost, int aPort, string aUser, string aPass, int aServ
 }
 //------------------------------------------------------------------ Close
 void MqlNet::Close() {
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::Close - Start function.");
    if (hSession > 0) {
       InternetCloseHandle(hSession);
       hSession = -1;
-      Print("-Close Session...");
+      LogError(INETHTTP_LOG_DEBUG, "MqlNet::Close - Close Session...");
    }
    if (hConnect > 0) {
       InternetCloseHandle(hConnect);
       hConnect = -1;
-      Print("-Close Connect...");
+      LogError(INETHTTP_LOG_DEBUG, "MqlNet::Close - Close Connect...");
    }
 }
 //------------------------------------------------------------------ Request
 bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::Request - Start function.");
    if (!CheckTerminal())
       return false;
    uchar data[];
@@ -202,7 +234,7 @@ bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
    if (hSession <= 0 || hConnect <= 0) {
       Close();
       if (!Open(Host, Port, User, Pass, Service)) {
-         Print("-Err Connect");
+         LogError(INETHTTP_LOG_ERROR, "MqlNet::Request - Err Connect using Open");
          Close();
          return (false);
       }
@@ -218,7 +250,7 @@ bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
    // Get last error code
    if (hRequest <= 0) {
       lastError = Kernel32::GetLastError();
-      Print("-Err OpenRequest " + (string) lastError);
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::Request - Err HttpOpenRequestW=" + (string) lastError);
       InternetCloseHandle(hConnect);
       return (false);
    }
@@ -234,7 +266,7 @@ bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
       bool rez = InternetSetOptionW(hRequest, INTERNET_OPTION_SECURITY_FLAGS, dwFlags, sizeof(dwFlags));
       if (!rez) {
          lastError = Kernel32::GetLastError();
-         Print("-Err SetOptionW " + (string) lastError);
+         LogError(INETHTTP_LOG_ERROR, "MqlNet::Request - Err InternetSetOptionW=" + (string) lastError);
       }
    }
    // sending the request
@@ -245,7 +277,7 @@ bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
       hSend = HttpSendRequestW(hRequest, req.stHead, StringLen(req.stHead), inData, ArraySize(inData));
       if (hSend <= 0) {
          lastError = Kernel32::GetLastError();
-         Print("-Err SendRequest= ", (string) lastError);
+         LogError(INETHTTP_LOG_ERROR, "MqlNet::Request - Err HttpSendRequestW=" + (string) lastError + ". Attempts Count: " + (string)n);
       } else
          break;
    }
@@ -262,6 +294,7 @@ bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
 }
 //------------------------------------------------------------------ ReadPage
 void MqlNet::ReadPage(int hRequest, uchar &outData[]) {
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::ReadPage - Start function.");
    if (!CheckTerminal())
       return;
    // read the page
@@ -283,12 +316,13 @@ void MqlNet::ReadPage(int hRequest, uchar &outData[]) {
 }
 //------------------------------------------------------------------ GetContentSize
 int MqlNet::GetContentSize(int hRequest) {
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::GetContentSize - Start function.");
    if (!TerminalInfoInteger(TERMINAL_DLLS_ALLOWED)) {
-      Print("-DLL not allowed");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::GetContentSize - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
    if (!MQL5InfoInteger(MQL5_DLLS_ALLOWED)) {
-      Print("-DLL not allowed");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::GetContentSize - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
    int len = 32, ind = 0;
@@ -296,7 +330,7 @@ int MqlNet::GetContentSize(int hRequest) {
    bool Res = HttpQueryInfoW(hRequest, HTTP_QUERY_CONTENT_LENGTH, buf, len, ind);
    if (!Res) {
       int lastError = Kernel32::GetLastError();
-      Print("-Err QueryInfo (Size)" + (string) lastError);
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::GetContentSize - Err QueryInfo (Size)" + (string) lastError);
       return (-1);
    }
    // This is a workaround because CharArrayToString does somehow not work...
@@ -311,6 +345,7 @@ int MqlNet::GetContentSize(int hRequest) {
 //|                                                                  |
 //+------------------------------------------------------------------+
 int MqlNet::GetHTTPStatusCode(int hRequest) {
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::GetHTTPStatusCode - Start function.");
    if (!CheckTerminal())
       return -1;
    uchar cBuff[32];
@@ -319,7 +354,7 @@ int MqlNet::GetHTTPStatusCode(int hRequest) {
    bool Res = HttpQueryInfoW(hRequest, HTTP_QUERY_STATUS_CODE, cBuff, cBuffLength, cBuffIndex);
    if (!Res) {
       int lastError = Kernel32::GetLastError();
-      Print("-Err QueryInfo (Status)" + (string) lastError);
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::GetHTTPStatusCode - Err QueryInfo (Status)" + (string) lastError);
       return (-1);
    }
    string s = "";
@@ -334,6 +369,7 @@ int MqlNet::GetHTTPStatusCode(int hRequest) {
 //|                                                                  |
 //+------------------------------------------------------------------+
 string MqlNet::GetHTTPHeaders(int hRequest) {
+   LogError(INETHTTP_LOG_DEBUG, "MqlNet::GetHTTPHeaders - Start function.");
    if (!CheckTerminal()) {
       return "";
    }
@@ -354,13 +390,36 @@ string MqlNet::GetHTTPHeaders(int hRequest) {
 //+------------------------------------------------------------------+
 bool MqlNet::CheckTerminal() {
    if (!TerminalInfoInteger(TERMINAL_DLLS_ALLOWED)) {
-      Print("-DLL not allowed");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::CheckTerminal - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
    if (!MQL5InfoInteger(MQL5_DLLS_ALLOWED)) {
-      Print("-DLL not allowed");
+      LogError(INETHTTP_LOG_ERROR, "MqlNet::CheckTerminal - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
    return true;
 }
 //+------------------------------------------------------------------+
+
+void MqlNet::LogError(int pLevel, string pMsg) {
+
+   // If the log level is not at least the verbosity, do not show it
+   if (pLevel < INETHTTP_LOG_LEVEL_MIN) {
+      return;
+   } 
+
+   switch (pLevel) {
+   case INETHTTP_LOG_DEBUG:
+      Print("++InetHttp[DEBUG] " + pMsg);
+      break;
+   case INETHTTP_LOG_INFO:
+      Print("++InetHttp[INFO] " + pMsg);
+      break;
+   case INETHTTP_LOG_WARN:
+      Print("--InetHttp[WARN] " + pMsg);
+      break;
+   case INETHTTP_LOG_ERROR:
+      Print("--InetHttp[ERROR] " + pMsg);
+      break;
+   }
+}

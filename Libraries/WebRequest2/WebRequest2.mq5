@@ -7,8 +7,30 @@
 #property link "https://github.com/sirtoobii"
 #property version "1.00"
 #property library
+#property strict
+
+// If not provided, set the Log Verbosity to 1
+// Value 0: Show everything (Debug, Info, Warn and Error)
+// Value 1: Show only Info, Warn and Error
+// Value 2: Show only Warn and Error
+// Value 3: Show only Error
+// By default, show Info, Warn and Error
+#ifndef WEBREQUEST2_LOG_LEVEL_MIN
+   #define WEBREQUEST2_LOG_LEVEL_MIN 2
+#endif
+
+#define WEBREQUEST2_LOG_DEBUG 0
+#define WEBREQUEST2_LOG_INFO 1
+#define WEBREQUEST2_LOG_WARN 2
+#define WEBREQUEST2_LOG_ERROR 3
+
+// Set the same verbosity level for the INETHTTP library we will use in this script
+#define INETHTTP_LOG_LEVEL_MIN WEBREQUEST2_LOG_LEVEL_MIN
+
 #include "InetHttp.mqh"
+
 MqlNet INet;
+
 int WebRequest2(const string method,                // HTTP-Methode
                 const string url,                   // URL-Adresse
                 const string headers,               // Headers
@@ -20,7 +42,8 @@ int WebRequest2(const string method,                // HTTP-Methode
                 const bool allowInsecure = false,   // Allow self signed certs
                 const bool useSSL = NULL            // Use SSL encrypted connection
                 ) export {
-   Print(url);
+   LogError(WEBREQUEST2_LOG_DEBUG, "Start of WebRequest2.");
+   LogError(WEBREQUEST2_LOG_DEBUG, "URL:" + url);
    int Port = port;
    bool UseSSL = useSSL;
    string Host = "";
@@ -33,7 +56,7 @@ int WebRequest2(const string method,                // HTTP-Methode
    int offset = 0;
    // Determine Ports if not set
    if ((StringFind(lower_Url, "http") == -1) && (port == NULL)) {
-      LogError(2, "Please specifiy eighter a port or Http(s) with the url parameter");
+      LogError(WEBREQUEST2_LOG_ERROR, "Please specifiy eighter a port or Http(s) with the url parameter");
       return -1;
    }
    if (port == NULL && StringFind(lower_Url, "https://") != -1) {
@@ -55,33 +78,49 @@ int WebRequest2(const string method,                // HTTP-Methode
    if (path_start > 0) {
       Host = StringSubstr(lower_Url, 0, path_start);
       Path = StringSubstr(url, path_start + offset);
-      LogError(0, "Set Host to: " + Host + " and Path: " + Path + " with Port: " + IntegerToString(Port) + " SSL=" + (string) UseSSL + " Insecure=" + (string) allowInsecure);
+      LogError(WEBREQUEST2_LOG_DEBUG, "Set Host to: " + Host + " and Path: " + Path + " with Port: " + IntegerToString(Port) + " SSL=" + (string) UseSSL + " Insecure=" + (string) allowInsecure);
    } else {
       Host = lower_Url;
-      LogError(0, "Set Host to: " + Host + " with Port: " + IntegerToString(Port) + " SSL=" + (string) UseSSL + " Insecure=" + (string) allowInsecure);
+      LogError(WEBREQUEST2_LOG_DEBUG, "Set Host to: " + Host + " with Port: " + IntegerToString(Port) + " SSL=" + (string) UseSSL + " Insecure=" + (string) allowInsecure);
    }
+
    // Open connection
+   LogError(WEBREQUEST2_LOG_DEBUG, "Calling INet.Open ...");
    if (!INet.Open(Host, Port, "", "", INTERNET_SERVICE_HTTP))
       return -1;
+   LogError(WEBREQUEST2_LOG_DEBUG, "Calling req.Init ...");
    if (method == "GET")
       req.Init(method, Path, Head, "", false, file, false, UseSSL, allowInsecure);
    if (method == "POST")
       req.Init(method, Path, Head, "", false, file, false, UseSSL, allowInsecure);
+   LogError(WEBREQUEST2_LOG_DEBUG, "Calling INet.Request ...");
    INet.Request(req, data, result);
    result_headers = req.resHeader;
+   LogError(WEBREQUEST2_LOG_DEBUG, "Calling INet.Close ...");
+   INet.Close();
+   LogError(WEBREQUEST2_LOG_DEBUG, "End of WebRequest2.");
    return req.resCode;
 }
 
-void LogError(int level, string msg) {
-   switch (level) {
-   case 0:
-      Print("++Webrequest2[INFO] " + msg);
+void LogError(int pLevel, string pMsg) {
+
+   // If the log level is not at least the verbosity, do not show it
+   if (pLevel < WEBREQUEST2_LOG_LEVEL_MIN) {
+      return;
+   } 
+
+   switch (pLevel) {
+   case WEBREQUEST2_LOG_DEBUG:
+      Print("++WebRequest2[DEBUG] " + pMsg);
       break;
-   case 1:
-      Print("--Webrequest2[WARN] " + msg);
+   case WEBREQUEST2_LOG_INFO:
+      Print("++WebRequest2[INFO] " + pMsg);
       break;
-   case 2:
-      Print("--Webrequest2[ERROR] " + msg);
+   case WEBREQUEST2_LOG_WARN:
+      Print("--WebRequest2[WARN] " + pMsg);
+      break;
+   case WEBREQUEST2_LOG_ERROR:
+      Print("--WebRequest2[ERROR] " + pMsg);
       break;
    }
 }
