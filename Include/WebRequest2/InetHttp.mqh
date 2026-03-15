@@ -33,7 +33,7 @@
 
 // Default User-Agent string (can be overridden before including this file)
 #ifndef INETHTTP_USER_AGENT
-   #define INETHTTP_USER_AGENT "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
+   #define INETHTTP_USER_AGENT "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"
 #endif
 
 #define FALSE 0
