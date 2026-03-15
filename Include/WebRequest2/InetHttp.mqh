@@ -8,9 +8,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright © 2010, FXmaster.de,Copyright © 2018, T.Bossert"
 #property link "www.FXmaster.de,https://github.com/sirtoobii"
-#property version "1.01"
+#property version "2.00"
 #property description "WinHttp & WinInet API"
-#property library
 #property strict
 
 // Useful link to investigate/fix "leaked strings left"
@@ -31,6 +30,11 @@
 #define INETHTTP_LOG_INFO 1
 #define INETHTTP_LOG_WARN 2
 #define INETHTTP_LOG_ERROR 3
+
+// Default User-Agent string (can be overridden before including this file)
+#ifndef INETHTTP_USER_AGENT
+   #define INETHTTP_USER_AGENT "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
+#endif
 
 #define FALSE 0
 
@@ -86,6 +90,7 @@ BOOL InternetQueryOptionW(HINTERNET hInternet, DWORD dwOption, LPDWORD lpBuffer,
 #define INTERNET_FLAG_RELOAD           0x80000000   // get page from server when calling it
 #define INTERNET_OPTION_SECURITY_FLAGS 31
 
+#define INTERNET_OPTION_RECEIVE_TIMEOUT 6
 #define ERROR_INTERNET_INVALID_CA              12045
 #define INTERNET_FLAG_IGNORE_CERT_DATE_INVALID 0x00002000
 #define INTERNET_FLAG_IGNORE_CERT_CN_INVALID   0x00001000
@@ -141,8 +146,8 @@ class MqlNet {
    ~MqlNet();                                                                      // destructor
    bool Open(string aHost, int aPort, string aUser, string aPass, int aService);   // create a session and open a connection
    void Close();                                                                   // close the session and the connection
-   bool Request(tagRequest &req, uchar &inData[], uchar &outData[]);               // send the request
-   void ReadPage(int hRequest, uchar &outData[]);
+   bool Request(tagRequest &req, char &inData[], char &outData[], int timeout=0); // send the request
+   void ReadPage(int hRequest, char &outData[]);
    int GetContentSize(int hURL);                                                   // get information about the size of downloaded page
    string GetHTTPHeaders(int hRequest);                                            // Get all result headers
    int GetHTTPStatusCode(int hRequest);                                            // returns the status code of a request
@@ -173,7 +178,7 @@ bool MqlNet::Open(string aHost, int aPort, string aUser, string aPass, int aServ
       LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
-   if (!MQL5InfoInteger(MQL5_DLLS_ALLOWED)) {
+   if (!MQLInfoInteger(MQL_DLLS_ALLOWED)) {
       LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - DLL not allowed");
       return (false);
    }                         // checking whether DLLs are allowed in the terminal
@@ -184,8 +189,7 @@ bool MqlNet::Open(string aHost, int aPort, string aUser, string aPass, int aServ
       LogError(INETHTTP_LOG_ERROR, "MqlNet::Open - Err InternetAttemptConnect");
       return (false);
    }   // exit if the attempt to check the current Internet connection failed
-   // string UserAgent = "Metatrader 5";
-   string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0";
+   string UserAgent = INETHTTP_USER_AGENT;
    string nill = "";
    hSession = InternetOpenW(UserAgent, OPEN_TYPE_PRECONFIG, nill, nill, 0);   // open session
    if (hSession <= 0) {
@@ -209,25 +213,26 @@ bool MqlNet::Open(string aHost, int aPort, string aUser, string aPass, int aServ
 //------------------------------------------------------------------ Close
 void MqlNet::Close() {
    LogError(INETHTTP_LOG_DEBUG, "MqlNet::Close - Start function.");
-   if (hSession > 0) {
-      InternetCloseHandle(hSession);
-      hSession = -1;
-      LogError(INETHTTP_LOG_DEBUG, "MqlNet::Close - Close Session...");
-   }
+   // Close child handle (connection) before parent handle (session)
    if (hConnect > 0) {
       InternetCloseHandle(hConnect);
       hConnect = -1;
       LogError(INETHTTP_LOG_DEBUG, "MqlNet::Close - Close Connect...");
    }
+   if (hSession > 0) {
+      InternetCloseHandle(hSession);
+      hSession = -1;
+      LogError(INETHTTP_LOG_DEBUG, "MqlNet::Close - Close Session...");
+   }
 }
 //------------------------------------------------------------------ Request
-bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
+bool MqlNet::Request(tagRequest &req, char &inData[], char &outData[], int timeout/*=0*/) {
    LogError(INETHTTP_LOG_DEBUG, "MqlNet::Request - Start function.");
    if (!CheckTerminal())
       return false;
    uchar data[];
    int hRequest;
-   int hSend = 0;
+   bool sendOk = false;
    string Vers = "HTTP/1.1";
    string nill = "";
    int lastError = 0;
@@ -254,7 +259,14 @@ bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
       InternetCloseHandle(hConnect);
       return (false);
    }
-   // Set certificate policity (warning this configuration is very unsecure and shouldn't be used where security matters!)
+   // Set receive timeout if specified
+   if (timeout > 0) {
+      int timeoutMs = timeout;
+      if (!InternetSetOptionW(hRequest, INTERNET_OPTION_RECEIVE_TIMEOUT, timeoutMs, sizeof(timeoutMs))) {
+         LogError(INETHTTP_LOG_WARN, "MqlNet::Request - Failed to set receive timeout");
+      }
+   }
+   // Set certificate policy (warning this configuration is very unsecure and shouldn't be used where security matters!)
    if (req.trustSelf) {
       int dwFlags;
       int dwBuffLen = sizeof(dwFlags);
@@ -269,49 +281,67 @@ bool MqlNet::Request(tagRequest &req, uchar &inData[], uchar &outData[]) {
          LogError(INETHTTP_LOG_ERROR, "MqlNet::Request - Err InternetSetOptionW=" + (string) lastError);
       }
    }
+   // Copy char[] to uchar[] for the WinInet DLL call
+   uchar sendData[];
+   ArrayResize(sendData, ArraySize(inData));
+   for (int j = 0; j < ArraySize(inData); j++)
+      sendData[j] = (uchar)inData[j];
    // sending the request
    int n = 0;
    while (n < 3) {
       n++;
-      // send
-      hSend = HttpSendRequestW(hRequest, req.stHead, StringLen(req.stHead), inData, ArraySize(inData));
-      if (hSend <= 0) {
+      // send — HttpSendRequestW returns a BOOL, not a handle
+      sendOk = (HttpSendRequestW(hRequest, req.stHead, StringLen(req.stHead), sendData, ArraySize(sendData)) != 0);
+      if (!sendOk) {
          lastError = Kernel32::GetLastError();
          LogError(INETHTTP_LOG_ERROR, "MqlNet::Request - Err HttpSendRequestW=" + (string) lastError + ". Attempts Count: " + (string)n);
       } else
          break;
    }
-   if (hSend > 0) {
+   if (sendOk) {
       req.resCode = GetHTTPStatusCode(hRequest);   // Get response code
       req.resHeader = GetHTTPHeaders(hRequest);    // Get Header
       ReadPage(hRequest, outData);                 // Read data from server
    }
    InternetCloseHandle(hRequest);
-   InternetCloseHandle(hSend);   // close all handles
-   if (hSend <= 0)
+   if (!sendOk)
       Close();
    return (true);
 }
 //------------------------------------------------------------------ ReadPage
-void MqlNet::ReadPage(int hRequest, uchar &outData[]) {
+void MqlNet::ReadPage(int hRequest, char &outData[]) {
    LogError(INETHTTP_LOG_DEBUG, "MqlNet::ReadPage - Start function.");
    if (!CheckTerminal())
       return;
    // read the page
-   int bufferSize = 100;
-   uchar ch[100];
-   string toStr = "";
-   int dwBytes, h = -1;
-   long content_size = GetContentSize(hRequest);
-   ArrayResize(outData, GetContentSize(hRequest));
+   int bufferSize = 4096;
+   uchar ch[4096];
+   int dwBytes;
+   int content_size = GetContentSize(hRequest);
    int index = 0;
+   if (content_size > 0) {
+      // Content-Length is known — pre-allocate
+      ArrayResize(outData, content_size);
+   } else {
+      // Content-Length missing or invalid — start with a reasonable buffer
+      ArrayResize(outData, 0);
+   }
    while (InternetReadFile(hRequest, ch, bufferSize, dwBytes)) {
       if (dwBytes <= 0)
          break;
+      // Grow the array if needed (always needed when Content-Length was missing,
+      // or as safety when server sends more than Content-Length)
+      if (index + dwBytes > ArraySize(outData)) {
+         ArrayResize(outData, index + dwBytes);
+      }
       for (int i = 0; i < dwBytes; i++) {
-         outData[i + index] = ch[i];
+         outData[i + index] = (char)ch[i];
       }
       index += dwBytes;
+   }
+   // Trim to actual size received
+   if (index != ArraySize(outData)) {
+      ArrayResize(outData, index);
    }
 }
 //------------------------------------------------------------------ GetContentSize
@@ -321,7 +351,7 @@ int MqlNet::GetContentSize(int hRequest) {
       LogError(INETHTTP_LOG_ERROR, "MqlNet::GetContentSize - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
-   if (!MQL5InfoInteger(MQL5_DLLS_ALLOWED)) {
+   if (!MQLInfoInteger(MQL_DLLS_ALLOWED)) {
       LogError(INETHTTP_LOG_ERROR, "MqlNet::GetContentSize - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
@@ -329,8 +359,8 @@ int MqlNet::GetContentSize(int hRequest) {
    uchar buf[32];
    bool Res = HttpQueryInfoW(hRequest, HTTP_QUERY_CONTENT_LENGTH, buf, len, ind);
    if (!Res) {
-      int lastError = Kernel32::GetLastError();
-      LogError(INETHTTP_LOG_ERROR, "MqlNet::GetContentSize - Err QueryInfo (Size)" + (string) lastError);
+      // 12150 = ERROR_HTTP_HEADER_NOT_FOUND — normal for chunked/streaming responses
+      LogError(INETHTTP_LOG_DEBUG, "MqlNet::GetContentSize - No Content-Length header, will read dynamically");
       return (-1);
    }
    // This is a workaround because CharArrayToString does somehow not work...
@@ -338,8 +368,13 @@ int MqlNet::GetContentSize(int hRequest) {
    for (int i = 0; i < len; i++) {
       StringAdd(s, CharToString(buf[i]));
    }
-   // ToDo Overflow prodection!
-   return ((int) StringToInteger(s));
+   long size = StringToInteger(s);
+   // Overflow protection: reject negative values and cap at ~100MB
+   if (size < 0 || size > 104857600) {
+      LogError(INETHTTP_LOG_WARN, "MqlNet::GetContentSize - Content-Length out of range: " + (string) size);
+      return (-1);
+   }
+   return ((int) size);
 }
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -373,10 +408,12 @@ string MqlNet::GetHTTPHeaders(int hRequest) {
    if (!CheckTerminal()) {
       return "";
    }
-   uchar cBuff[1024];
-   int cBuffLength = 1024;
+   uchar cBuff[4096];
+   int cBuffLength = 4096;
    int cBuffIndex = 0;
    HttpQueryInfoW(hRequest, HTTP_QUERY_RAW_HEADERS_CRLF, cBuff, cBuffLength, cBuffIndex);
+   // Cap to buffer size to prevent array out of range
+   if (cBuffLength > 4096) cBuffLength = 4096;
    string s = "";
    // This is a workaround because CharArrayToString does somehow not work...
    for (int i = 0; i < cBuffLength; i++) {
@@ -393,7 +430,7 @@ bool MqlNet::CheckTerminal() {
       LogError(INETHTTP_LOG_ERROR, "MqlNet::CheckTerminal - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal
-   if (!MQL5InfoInteger(MQL5_DLLS_ALLOWED)) {
+   if (!MQLInfoInteger(MQL_DLLS_ALLOWED)) {
       LogError(INETHTTP_LOG_ERROR, "MqlNet::CheckTerminal - DLL not allowed");
       return (false);
    }   // checking whether DLLs are allowed in the terminal

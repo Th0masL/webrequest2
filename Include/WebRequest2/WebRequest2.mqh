@@ -5,8 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright © 2018, T.Bossert"
 #property link "https://github.com/sirtoobii"
-#property version "1.00"
-#property library
+#property version "2.00"
 #property strict
 
 // If not provided, set the Log Verbosity to 1
@@ -41,7 +40,7 @@ int WebRequest2(const string method,                // HTTP-Methode
                 const int port = NULL,              // Define custom port
                 const bool allowInsecure = false,   // Allow self signed certs
                 const bool useSSL = NULL            // Use SSL encrypted connection
-                ) export {
+                ) {
    LogError(WEBREQUEST2_LOG_DEBUG, "Start of WebRequest2.");
    LogError(WEBREQUEST2_LOG_DEBUG, "URL:" + url);
    int Port = port;
@@ -94,7 +93,7 @@ int WebRequest2(const string method,                // HTTP-Methode
    if (method == "POST")
       req.Init(method, Path, Head, "", false, file, false, UseSSL, allowInsecure);
    LogError(WEBREQUEST2_LOG_DEBUG, "Calling INet.Request ...");
-   INet.Request(req, data, result);
+   INet.Request(req, data, result, timeout);
    result_headers = req.resHeader;
    LogError(WEBREQUEST2_LOG_DEBUG, "Calling INet.Close ...");
    INet.Close();
