@@ -8,7 +8,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright © 2010, FXmaster.de,Copyright © 2018, T.Bossert"
 #property link "www.FXmaster.de,https://github.com/sirtoobii"
-#property version "1.01"
+#property version "2.00"
 #property description "WinHttp & WinInet API"
 #property strict
 

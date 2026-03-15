@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright © 2018, T.Bossert"
 #property link "https://github.com/sirtoobii"
-#property version "1.00"
+#property version "2.00"
 #property strict
 
 // If not provided, set the Log Verbosity to 1
